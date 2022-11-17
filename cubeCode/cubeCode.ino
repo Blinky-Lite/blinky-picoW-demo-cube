@@ -23,7 +23,7 @@ void setup()
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
   delay(1000);
-//  Serial.begin(115200);
+//  Serial.begin(9600);
 //  while (!Serial) {;}
 
   BlinkyMqttCube.setChattyCathy(false);
