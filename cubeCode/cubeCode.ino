@@ -15,19 +15,19 @@ void subscribeCallback(uint8_t address, int16_t value)
 }
 
 
-int led1Pin = 10;
-int led2Pin = 11;
+int led1Pin = 14;
+int led2Pin = 17;
 
 void setup() 
 {
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
   delay(1000);
-//  Serial.begin(9600);
+//  Serial.begin(115200);
 //  while (!Serial) {;}
 
   BlinkyMqttCube.setChattyCathy(false);
-  BlinkyMqttCube.init(2000,true, 17, 255, 16, (int16_t*)& cubeData,  sizeof(cubeData), subscribeCallback);
+  BlinkyMqttCube.init(2000,true, 16, 255, 15, (int16_t*)& cubeData,  sizeof(cubeData), subscribeCallback);
 
   cubeData.led1 = 0;
   cubeData.led2 = 0;
