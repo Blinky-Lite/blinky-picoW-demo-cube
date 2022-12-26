@@ -1,45 +1,103 @@
 #include "BlinkyMqttCube.h"
 
-struct
-{
-  int16_t state;
-  int16_t watchdog;
-  int16_t chipTemp;
-  int16_t led1;
-  int16_t led2;
-} cubeData;
-
-void subscribeCallback(uint8_t address, int16_t value)
-{
-  if (address > 1) setLeds();
-}
-
-
+int commLEDPin = 16;
+int commLEDBright = 255; 
+int resetButtonPin = 15;
 int led1Pin = 14;
 int led2Pin = 17;
 
-void setup() 
+unsigned long lastPublishTime;
+unsigned long publishInterval = 2000;
+
+void setup1() 
 {
+  Serial.begin(115200);
+  lastPublishTime = millis();
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
-  delay(1000);
-//  Serial.begin(115200);
-//  while (!Serial) {;}
-
-  BlinkyMqttCube.setChattyCathy(false);
-  BlinkyMqttCube.init(2000,true, 16, 255, 15, (int16_t*)& cubeData,  sizeof(cubeData), subscribeCallback);
-
-  cubeData.led1 = 0;
-  cubeData.led2 = 0;
+  cubeData.state = 0;
+  cubeData.watchdog = 0;
+  cubeData.led1 = 50;
+  cubeData.led2 = 100;
   setLeds();
 }
+void setup() 
+{
+  // Optional setup to overide defaults
+  BlinkyMqttCube.setChattyCathy(true);
+  BlinkyMqttCube.setWifiTimeoutMs(20000);
+  BlinkyMqttCube.setWifiRetryMs(20000);
+  BlinkyMqttCube.setMqttRetryMs(3000);
+  BlinkyMqttCube.setResetTimeoutMs(10000);
+  BlinkyMqttCube.setHdwrWatchdogMs(8000);
+  BlinkyMqttCube.setBlMqttKeepAlive(8);
+  BlinkyMqttCube.setBlMqttSocketTimeout(6);
+  BlinkyMqttCube.setMqttLedFlashMs(10);
+  BlinkyMqttCube.setWirelesBlinkMs(100);
+  
+  // Must be included
+  BlinkyMqttCube.init(commLEDPin, commLEDBright, resetButtonPin);
+}
 
+void loop1() 
+{
+  unsigned long nowTime = millis();
+
+  int fifoSize = rp2040.fifo.available();
+  if (fifoSize > 0)
+  {
+    uint32_t command = 0;
+    while (fifoSize > 0)
+    {
+      command = rp2040.fifo.pop();
+      fifoSize = rp2040.fifo.available();
+      delay(1);
+    }
+    switch (command) 
+    {
+      case 1:
+        rp2040.fifo.push(command);
+        fifoSize = 0;
+        while (fifoSize == 0)
+        {
+          fifoSize = rp2040.fifo.available();
+          delay(1);
+        }
+        command = rp2040.fifo.pop();
+        break;
+      default:
+        // statements
+        break;
+    }
+  }
+ 
+
+  
+  if ((nowTime - lastPublishTime) > publishInterval)
+  {
+    lastPublishTime = nowTime;
+    cubeData.watchdog = cubeData.watchdog + 1;
+    if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
+    uint32_t command = 1;
+    rp2040.fifo.push(command);
+    int fifoSize = 0;
+    while (fifoSize == 0)
+    {
+      fifoSize = rp2040.fifo.available();
+      delay(1);
+    }
+    command = rp2040.fifo.pop();
+  }  
+  
+  cubeData.chipTemp = (int16_t) (analogReadTemp() * 100.0);
+}
 void loop() 
 {
   BlinkyMqttCube.loop();
-  cubeData.chipTemp = (int16_t) (analogReadTemp() * 100.0);
-//  publishBlinkyBusNow(); 
+ //  publishBlinkyBusNow(); 
 }
+
+
 
 void setLeds()
 {
