@@ -11,20 +11,21 @@ unsigned long publishInterval = 2000;
 
 void setup1() 
 {
-  Serial.begin(115200);
+//  Serial.begin(115200);
   lastPublishTime = millis();
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
-  cubeData.state = 0;
+  cubeData.state = 1;
   cubeData.watchdog = 0;
-  cubeData.led1 = 50;
-  cubeData.led2 = 100;
-  setLeds();
+  cubeData.led1 = 0;
+  cubeData.led2 = 0;
+  analogWrite(led1Pin, cubeData.led1);    
+  analogWrite(led2Pin, cubeData.led2);    
 }
 void setup() 
 {
   // Optional setup to overide defaults
-  BlinkyMqttCube.setChattyCathy(true);
+  BlinkyMqttCube.setChattyCathy(false);
   BlinkyMqttCube.setWifiTimeoutMs(20000);
   BlinkyMqttCube.setWifiRetryMs(20000);
   BlinkyMqttCube.setMqttRetryMs(3000);
@@ -34,6 +35,7 @@ void setup()
   BlinkyMqttCube.setBlMqttSocketTimeout(6);
   BlinkyMqttCube.setMqttLedFlashMs(10);
   BlinkyMqttCube.setWirelesBlinkMs(100);
+  BlinkyMqttCube.setMaxNoMqttErrors(5);
   
   // Must be included
   BlinkyMqttCube.init(commLEDPin, commLEDBright, resetButtonPin);
@@ -42,51 +44,14 @@ void setup()
 void loop1() 
 {
   unsigned long nowTime = millis();
-
-  int fifoSize = rp2040.fifo.available();
-  if (fifoSize > 0)
-  {
-    uint32_t command = 0;
-    while (fifoSize > 0)
-    {
-      command = rp2040.fifo.pop();
-      fifoSize = rp2040.fifo.available();
-      delay(1);
-    }
-    switch (command) 
-    {
-      case 1:
-        rp2040.fifo.push(command);
-        fifoSize = 0;
-        while (fifoSize == 0)
-        {
-          fifoSize = rp2040.fifo.available();
-          delay(1);
-        }
-        command = rp2040.fifo.pop();
-        break;
-      default:
-        // statements
-        break;
-    }
-  }
- 
-
+  BlinkyMqttCube::checkForSettings();
   
   if ((nowTime - lastPublishTime) > publishInterval)
   {
     lastPublishTime = nowTime;
     cubeData.watchdog = cubeData.watchdog + 1;
     if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
-    uint32_t command = 1;
-    rp2040.fifo.push(command);
-    int fifoSize = 0;
-    while (fifoSize == 0)
-    {
-      fifoSize = rp2040.fifo.available();
-      delay(1);
-    }
-    command = rp2040.fifo.pop();
+    BlinkyMqttCube::publishToMqtt();
   }  
   
   cubeData.chipTemp = (int16_t) (analogReadTemp() * 100.0);
@@ -94,13 +59,25 @@ void loop1()
 void loop() 
 {
   BlinkyMqttCube.loop();
- //  publishBlinkyBusNow(); 
 }
 
-
-
-void setLeds()
+void handleNewMessage(uint8_t address)
 {
-  analogWrite(led1Pin, cubeData.led1);    
-  analogWrite(led2Pin, cubeData.led2);    
+  switch(address)
+  {
+    case 0:
+      break;
+    case 1:
+      break;
+    case 2:
+      break;
+    case 3:
+      analogWrite(led1Pin, cubeData.led1);  
+      break;
+    case 4:
+      analogWrite(led2Pin, cubeData.led2);    
+      break;
+    default:
+      break;
+  }
 }

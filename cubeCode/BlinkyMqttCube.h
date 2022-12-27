@@ -14,7 +14,6 @@
 #define WIRELESS_BLINK_MS     100
 #define MAX_NO_MQTT_ERRORS    5
 
-
 union SubscribeData
 {
   struct
@@ -26,8 +25,10 @@ union SubscribeData
   byte buffer[4];
 };
 
+SubscribeData subscribeData;
 static void   BlinkyMqttCubeWifiApButtonHandler();
 static void   BlinkyMqttCubeCallback(char* topic, byte* payload, unsigned int length);
+void          handleNewMessage(uint8_t address);
 
 class BlinkyMqttCube
 {
@@ -101,6 +102,9 @@ class BlinkyMqttCube
     void          setBlMqttSocketTimeout(uint16_t blMqttSocketTimeout){g_blMqttSocketTimeout = blMqttSocketTimeout;};
     void          setMqttLedFlashMs(int mqttLedFlashMs){g_mqttLedFlashMs = mqttLedFlashMs;};
     void          setWirelesBlinkMs(int wirelessBlinkMs){g_wirelessBlinkMs = wirelessBlinkMs;};
+    void          setMaxNoMqttErrors(int maxNoMqttErrors){g_maxNoMqttErrors = maxNoMqttErrors;};
+    static void   checkForSettings();
+    static void   publishToMqtt();
 
 };
 BlinkyMqttCube::BlinkyMqttCube()
@@ -681,8 +685,25 @@ void BlinkyMqttCube::mqttCubeCallback(char* topic, byte* payload, unsigned int l
   if (g_chattyCathy) Serial.println("}");
   if (g_subscribeData.command == 1)
   {
-// Fix     g_cubeData[g_subscribeData.address] = g_subscribeData.value;
-// Fix     g_userMqttCallback(g_subscribeData.address, g_subscribeData.value);
+    uint32_t command = 2;
+    rp2040.fifo.push(command);
+    int fifoSize = 0;
+    while (fifoSize == 0)
+    {
+      fifoSize = rp2040.fifo.available();
+      delay(1);
+    }
+    rp2040.fifo.pop();
+    cubeData.buffer[g_subscribeData.address * 2] = payload[2];
+    cubeData.buffer[g_subscribeData.address * 2 + 1] = payload[3];
+    rp2040.fifo.push((uint32_t) g_subscribeData.address);
+    fifoSize = 0;
+    while (fifoSize == 0)
+    {
+      fifoSize = rp2040.fifo.available();
+      delay(1);
+    }
+    rp2040.fifo.pop();
   }
   return;
 }
@@ -708,6 +729,51 @@ void BlinkyMqttCube::wifiApButtonHandler()
       setupWifiAp();
     }
   }
+}
+void BlinkyMqttCube::checkForSettings()
+{
+  int fifoSize = rp2040.fifo.available();
+  if (fifoSize > 0)
+  {
+    uint32_t command = 0;
+    while (fifoSize > 0)
+    {
+      command = rp2040.fifo.pop();
+      fifoSize = rp2040.fifo.available();
+      delay(1);
+    }
+    switch (command) 
+    {
+      case 2:
+        rp2040.fifo.push(command);
+        fifoSize = 0;
+        while (fifoSize == 0)
+        {
+          fifoSize = rp2040.fifo.available();
+          delay(1);
+        }
+        handleNewMessage((uint8_t) rp2040.fifo.pop());
+        rp2040.fifo.push(command);
+        break;
+      default:
+        // statements
+        break;
+    }
+  }
+  return;
+}
+void BlinkyMqttCube::publishToMqtt()
+{
+  uint32_t command = 1;
+  rp2040.fifo.push(command);
+  int fifoSize = 0;
+  while (fifoSize == 0)
+  {
+    fifoSize = rp2040.fifo.available();
+    delay(1);
+  }
+  command = rp2040.fifo.pop();
+  return;
 }
 
 BlinkyMqttCube BlinkyMqttCube;
