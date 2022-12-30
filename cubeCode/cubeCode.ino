@@ -1,4 +1,19 @@
-#include "BlinkyMqttCube.h"
+union CubeData
+{
+  struct
+  {
+    int16_t state;
+    int16_t watchdog;
+    int16_t chipTemp;
+    int16_t led1;
+    int16_t led2;
+  };
+  byte buffer[10];
+};
+CubeData cubeData;
+
+#include "BlinkyPicoWCube.h"
+
 
 int commLEDPin = 16;
 int commLEDBright = 255; 
@@ -9,9 +24,28 @@ int led2Pin = 17;
 unsigned long lastPublishTime;
 unsigned long publishInterval = 2000;
 
-void setup1() 
+void setupServerComm()
 {
+  // Optional setup to overide defaults
 //  Serial.begin(115200);
+  BlinkyPicoWCube.setChattyCathy(false);
+  BlinkyPicoWCube.setWifiTimeoutMs(20000);
+  BlinkyPicoWCube.setWifiRetryMs(20000);
+  BlinkyPicoWCube.setMqttRetryMs(3000);
+  BlinkyPicoWCube.setResetTimeoutMs(10000);
+  BlinkyPicoWCube.setHdwrWatchdogMs(8000);
+  BlinkyPicoWCube.setBlMqttKeepAlive(8);
+  BlinkyPicoWCube.setBlMqttSocketTimeout(4);
+  BlinkyPicoWCube.setMqttLedFlashMs(10);
+  BlinkyPicoWCube.setWirelesBlinkMs(100);
+  BlinkyPicoWCube.setMaxNoMqttErrors(5);
+  
+  // Must be included
+  BlinkyPicoWCube.init(commLEDPin, commLEDBright, resetButtonPin);
+}
+
+void setupCube()
+{
   lastPublishTime = millis();
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
@@ -22,46 +56,24 @@ void setup1()
   analogWrite(led1Pin, cubeData.led1);    
   analogWrite(led2Pin, cubeData.led2);    
 }
-void setup() 
-{
-  // Optional setup to overide defaults
-  BlinkyMqttCube.setChattyCathy(false);
-  BlinkyMqttCube.setWifiTimeoutMs(20000);
-  BlinkyMqttCube.setWifiRetryMs(20000);
-  BlinkyMqttCube.setMqttRetryMs(3000);
-  BlinkyMqttCube.setResetTimeoutMs(10000);
-  BlinkyMqttCube.setHdwrWatchdogMs(8000);
-  BlinkyMqttCube.setBlMqttKeepAlive(8);
-  BlinkyMqttCube.setBlMqttSocketTimeout(6);
-  BlinkyMqttCube.setMqttLedFlashMs(10);
-  BlinkyMqttCube.setWirelesBlinkMs(100);
-  BlinkyMqttCube.setMaxNoMqttErrors(5);
-  
-  // Must be included
-  BlinkyMqttCube.init(commLEDPin, commLEDBright, resetButtonPin);
-}
 
-void loop1() 
+void cubeLoop()
 {
   unsigned long nowTime = millis();
-  BlinkyMqttCube::checkForSettings();
   
   if ((nowTime - lastPublishTime) > publishInterval)
   {
     lastPublishTime = nowTime;
     cubeData.watchdog = cubeData.watchdog + 1;
     if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
-    BlinkyMqttCube::publishToMqtt();
+    BlinkyPicoWCube::publishToServer();
   }  
   
   cubeData.chipTemp = (int16_t) (analogReadTemp() * 100.0);
 }
-void loop() 
-{
-  BlinkyMqttCube.loop();
-}
 
-void handleNewMessage(uint8_t address)
+
+void handleNewSettingFromServer(uint8_t address)
 {
   switch(address)
   {

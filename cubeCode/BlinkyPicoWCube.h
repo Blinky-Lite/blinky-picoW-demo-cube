@@ -1,7 +1,6 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "LittleFS.h"
-#include "CubeData.h"
 
 #define BL_MQTT_KEEP_ALIVE    8
 #define BL_MQTT_SOCKETTIMEOUT 3
@@ -26,11 +25,18 @@ union SubscribeData
 };
 
 SubscribeData subscribeData;
-static void   BlinkyMqttCubeWifiApButtonHandler();
-static void   BlinkyMqttCubeCallback(char* topic, byte* payload, unsigned int length);
-void          handleNewMessage(uint8_t address);
+static void   BlinkyPicoWCubeWifiApButtonHandler();
+static void   BlinkyPicoWCubeCallback(char* topic, byte* payload, unsigned int length);
+void          handleNewSettingFromServer(uint8_t address);
+void          loop();
+void          loop1();
+void          setup();
+void          setup1();
+void          setupServerComm();
+void          setupCube();
+void          cubeLoop();
 
-class BlinkyMqttCube
+class BlinkyPicoWCube
 {
   private:
   
@@ -87,7 +93,7 @@ class BlinkyMqttCube
     void          setCommLEDPin(boolean ledState);
 
   public:
-    BlinkyMqttCube();
+    BlinkyPicoWCube();
     void          loop();
     void          init(int commLEDPin,  int commLEDBright, int resetButtonPin);
     void          setChattyCathy(boolean chattyCathy);
@@ -104,10 +110,10 @@ class BlinkyMqttCube
     void          setWirelesBlinkMs(int wirelessBlinkMs){g_wirelessBlinkMs = wirelessBlinkMs;};
     void          setMaxNoMqttErrors(int maxNoMqttErrors){g_maxNoMqttErrors = maxNoMqttErrors;};
     static void   checkForSettings();
-    static void   publishToMqtt();
+    static void   publishToServer();
 
 };
-BlinkyMqttCube::BlinkyMqttCube()
+BlinkyPicoWCube::BlinkyPicoWCube()
 {
 /*
   g_init = true;
@@ -133,7 +139,7 @@ BlinkyMqttCube::BlinkyMqttCube()
 */
   g_cubeDataSize = (unsigned int) sizeof(g_cubeData);
 }
-void BlinkyMqttCube::setCommLEDPin(boolean ledState)
+void BlinkyPicoWCube::setCommLEDPin(boolean ledState)
 {
   g_commLEDState = ledState;
   if (g_commLEDPin == LED_BUILTIN)
@@ -153,7 +159,7 @@ void BlinkyMqttCube::setCommLEDPin(boolean ledState)
   }
 }
 
-void BlinkyMqttCube::loop()
+void BlinkyPicoWCube::loop()
 {
   rp2040.wdt_reset();;
 
@@ -187,6 +193,7 @@ void BlinkyMqttCube::loop()
   {
     serveWebPage();
     readWebPage();
+    delay(100);
   }
   else
   {
@@ -247,7 +254,7 @@ void BlinkyMqttCube::loop()
   }
 
 }
-void BlinkyMqttCube::init(int commLEDPin, int commLEDBright, int resetButtonPin)
+void BlinkyPicoWCube::init(int commLEDPin, int commLEDBright, int resetButtonPin)
 {
   g_init = true;
   g_wifiClient = WiFiClient();
@@ -290,14 +297,14 @@ void BlinkyMqttCube::init(int commLEDPin, int commLEDBright, int resetButtonPin)
 
   if (g_chattyCathy) Serial.println("Starting Communications");
   g_mqttClient.setServer(g_mqttServer.c_str(), 1883);
-  g_mqttClient.setCallback(BlinkyMqttCubeCallback);
+  g_mqttClient.setCallback(BlinkyPicoWCubeCallback);
   g_commLEDPin = commLEDPin;
   pinMode(g_commLEDPin, OUTPUT);
   setCommLEDPin(false);
   g_resetButtonPin = resetButtonPin;
   if (g_resetButtonPin > 0 )
   { 
-    attachInterrupt(digitalPinToInterrupt(g_resetButtonPin), BlinkyMqttCubeWifiApButtonHandler, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(g_resetButtonPin), BlinkyPicoWCubeWifiApButtonHandler, CHANGE);
     pinMode(g_resetButtonPin, INPUT);
   }
   rp2040.wdt_begin(g_hdwrWatchdogMs);
@@ -305,7 +312,7 @@ void BlinkyMqttCube::init(int commLEDPin, int commLEDBright, int resetButtonPin)
   setup_wifi();
   g_init = false;
 }
-void BlinkyMqttCube::setup_wifi() 
+void BlinkyPicoWCube::setup_wifi() 
 {
   if (((millis() - g_wifiLastTry) < g_wifiRetry) && !g_init) return;
   setCommLEDPin(true);
@@ -350,7 +357,7 @@ void BlinkyMqttCube::setup_wifi()
 }
 
 
-boolean BlinkyMqttCube::reconnect() 
+boolean BlinkyPicoWCube::reconnect() 
 {
   unsigned long now = millis();
   boolean connected = g_mqttClient.connected();
@@ -421,7 +428,7 @@ boolean BlinkyMqttCube::reconnect()
   }
   return false;
 }
-void BlinkyMqttCube::readWebPage()
+void BlinkyPicoWCube::readWebPage()
 {
   if (!g_webPageServed) return;
   if (g_webPageRead) return;
@@ -528,7 +535,7 @@ void BlinkyMqttCube::readWebPage()
     }
   }
 }
-void BlinkyMqttCube::serveWebPage()
+void BlinkyPicoWCube::serveWebPage()
 {
   if (g_webPageServed) return;
   WiFiClient client = g_wifiServer->available();
@@ -616,13 +623,14 @@ void BlinkyMqttCube::serveWebPage()
     client.println("</form>");
     client.println("</div>");
     client.println("</body></html>");
+    g_webPageRead = false;
     g_webPageServed = true;
     delay(100);
     client.stop();
     if (g_chattyCathy) Serial.println("client disconnected");
   }
 }
-String BlinkyMqttCube::replaceHtmlEscapeChar(String inString)
+String BlinkyPicoWCube::replaceHtmlEscapeChar(String inString)
 {
   String outString = "";
   char hexBuff[3];
@@ -644,7 +652,7 @@ String BlinkyMqttCube::replaceHtmlEscapeChar(String inString)
   }
   return outString;
 }
-void BlinkyMqttCube::setupWifiAp()
+void BlinkyPicoWCube::setupWifiAp()
 {
   if (g_wifiAccessPointMode) return;
   setCommLEDPin(true);
@@ -662,13 +670,13 @@ void BlinkyMqttCube::setupWifiAp()
   g_webPageServed = false;
   g_webPageRead = false;
 }
-void BlinkyMqttCube::setChattyCathy(boolean chattyCathy)
+void BlinkyPicoWCube::setChattyCathy(boolean chattyCathy)
 {
   g_chattyCathy = chattyCathy;
 
   return;
 }
-void BlinkyMqttCube::mqttCubeCallback(char* topic, byte* payload, unsigned int length)
+void BlinkyPicoWCube::mqttCubeCallback(char* topic, byte* payload, unsigned int length)
 {
   if (g_chattyCathy) Serial.print("Message arrived [");
   if (g_chattyCathy) Serial.print(topic);
@@ -707,7 +715,7 @@ void BlinkyMqttCube::mqttCubeCallback(char* topic, byte* payload, unsigned int l
   }
   return;
 }
-void BlinkyMqttCube::wifiApButtonHandler()
+void BlinkyPicoWCube::wifiApButtonHandler()
 {
   if (digitalRead(g_resetButtonPin)) 
   {
@@ -730,7 +738,7 @@ void BlinkyMqttCube::wifiApButtonHandler()
     }
   }
 }
-void BlinkyMqttCube::checkForSettings()
+void BlinkyPicoWCube::checkForSettings()
 {
   int fifoSize = rp2040.fifo.available();
   if (fifoSize > 0)
@@ -752,7 +760,7 @@ void BlinkyMqttCube::checkForSettings()
           fifoSize = rp2040.fifo.available();
           delay(1);
         }
-        handleNewMessage((uint8_t) rp2040.fifo.pop());
+        handleNewSettingFromServer((uint8_t) rp2040.fifo.pop());
         rp2040.fifo.push(command);
         break;
       default:
@@ -762,7 +770,7 @@ void BlinkyMqttCube::checkForSettings()
   }
   return;
 }
-void BlinkyMqttCube::publishToMqtt()
+void BlinkyPicoWCube::publishToServer()
 {
   uint32_t command = 1;
   rp2040.fifo.push(command);
@@ -776,15 +784,33 @@ void BlinkyMqttCube::publishToMqtt()
   return;
 }
 
-BlinkyMqttCube BlinkyMqttCube;
+BlinkyPicoWCube BlinkyPicoWCube;
 
-void BlinkyMqttCubeCallback(char* topic, byte* payload, unsigned int length) 
+void BlinkyPicoWCubeCallback(char* topic, byte* payload, unsigned int length) 
 {
-  BlinkyMqttCube.mqttCubeCallback(topic, payload,  length);
+  BlinkyPicoWCube.mqttCubeCallback(topic, payload,  length);
 }
 
-void BlinkyMqttCubeWifiApButtonHandler()
+void BlinkyPicoWCubeWifiApButtonHandler()
 {
   delay(50);
-  BlinkyMqttCube.wifiApButtonHandler();
+  BlinkyPicoWCube.wifiApButtonHandler();
+}
+
+void loop() 
+{
+  BlinkyPicoWCube.loop();
+}
+void loop1() 
+{
+  BlinkyPicoWCube::checkForSettings();
+  cubeLoop();
+}
+void setup1() 
+{
+  setupCube();
+}
+void setup() 
+{
+  setupServerComm();
 }
