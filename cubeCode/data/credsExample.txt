@@ -3,6 +3,6 @@
 {your.mqttbroker.com}
 {yourMqttUserName}
 {yourMqttPassword}
-{blinky-picoW-cube/01/reading}
-{blinky-picoW-cube/01/setting}
+{blinky-picoW-demo/01/reading}
+{blinky-picoW-demo/01/setting}
 
