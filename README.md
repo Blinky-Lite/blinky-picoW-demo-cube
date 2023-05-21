@@ -1,2 +1,2 @@
-# blinky-picoW-demo-cube DUALCORE
+# blinky-picoW-cube DUALCORE
 
