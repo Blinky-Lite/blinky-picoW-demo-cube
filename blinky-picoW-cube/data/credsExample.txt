@@ -1,8 +1,10 @@
 {yourSsid}
 {yourSsidPassword}
 {your.mqttbroker.com}
-{yourMqttUserName}
+{yourMqttUsername}
 {yourMqttPassword}
-{blinky-mqtt/picoW-01/reading}
-{blinky-mqtt/picoW-01/setting}
+{yourBox}
+{yourTrayType}
+{yourTrayName}
+{yourCubeType}
 
