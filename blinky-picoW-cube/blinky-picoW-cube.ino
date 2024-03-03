@@ -1,3 +1,5 @@
+boolean printDiagnostics = true;
+
 union CubeData
 {
   struct
@@ -27,8 +29,8 @@ unsigned long publishInterval = 2000;
 void setupServerComm()
 {
   // Optional setup to overide defaults
-//  Serial.begin(115200);
-  BlinkyPicoWCube.setChattyCathy(false);
+  if (printDiagnostics) Serial.begin(115200);
+  BlinkyPicoWCube.setChattyCathy(printDiagnostics);
   BlinkyPicoWCube.setWifiTimeoutMs(20000);
   BlinkyPicoWCube.setWifiRetryMs(20000);
   BlinkyPicoWCube.setMqttRetryMs(3000);
@@ -39,6 +41,7 @@ void setupServerComm()
   BlinkyPicoWCube.setMqttLedFlashMs(10);
   BlinkyPicoWCube.setWirelesBlinkMs(100);
   BlinkyPicoWCube.setMaxNoMqttErrors(5);
+  BlinkyPicoWCube.setMaxNoConnectionAttempts(5);
   
   // Must be included
   BlinkyPicoWCube.init(commLEDPin, commLEDBright, resetButtonPin);
