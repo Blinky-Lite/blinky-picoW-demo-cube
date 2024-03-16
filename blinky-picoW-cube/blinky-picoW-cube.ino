@@ -6,11 +6,12 @@ union CubeData
   {
     int16_t state;
     int16_t watchdog;
+    int16_t newData;
     int16_t chipTemp;
     int16_t led1;
     int16_t led2;
   };
-  byte buffer[10];
+  byte buffer[12];
 };
 CubeData cubeData;
 
@@ -54,6 +55,7 @@ void setupCube()
   pinMode(led2Pin, OUTPUT);
   cubeData.state = 1;
   cubeData.watchdog = 0;
+  cubeData.newData = 0;
   cubeData.led1 = 0;
   cubeData.led2 = 0;
   analogWrite(led1Pin, cubeData.led1);    
@@ -63,6 +65,7 @@ void setupCube()
 void cubeLoop()
 {
   unsigned long nowTime = millis();
+  checkNewData(nowTime);
   
   if ((nowTime - lastPublishTime) > publishInterval)
   {
@@ -74,7 +77,15 @@ void cubeLoop()
   
   cubeData.chipTemp = (int16_t) (analogReadTemp() * 100.0);
 }
-
+void checkNewData(unsigned long nowTime)
+{
+  if (cubeData.newData == 0 ) return;
+  lastPublishTime = nowTime;
+  cubeData.watchdog = cubeData.watchdog + 1;
+  if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
+  BlinkyPicoWCube::publishToServer();
+  cubeData.newData = 0;
+}
 
 void handleNewSettingFromServer(uint8_t address)
 {
@@ -87,10 +98,14 @@ void handleNewSettingFromServer(uint8_t address)
     case 2:
       break;
     case 3:
-      analogWrite(led1Pin, cubeData.led1);  
       break;
     case 4:
-      analogWrite(led2Pin, cubeData.led2);    
+      analogWrite(led1Pin, cubeData.led1); 
+      cubeData.newData = 1; 
+      break;
+    case 5:
+      analogWrite(led2Pin, cubeData.led2);  
+      cubeData.newData = 1; 
       break;
     default:
       break;
