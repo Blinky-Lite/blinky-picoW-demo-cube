@@ -72,7 +72,7 @@ void cubeLoop()
     lastPublishTime = nowTime;
     cubeData.watchdog = cubeData.watchdog + 1;
     if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
-    BlinkyPicoWCube::publishToServer();
+    BlinkyPicoWCube.publishToServer();
   }  
   
   cubeData.chipTemp = (int16_t) (analogReadTemp() * 100.0);
@@ -83,7 +83,7 @@ void checkNewData(unsigned long nowTime)
   lastPublishTime = nowTime;
   cubeData.watchdog = cubeData.watchdog + 1;
   if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
-  BlinkyPicoWCube::publishToServer();
+  BlinkyPicoWCube.publishToServer();
   cubeData.newData = 0;
 }
 
