@@ -1,4 +1,4 @@
-boolean printDiagnostics = false;
+boolean printDiagnostics = true;
 
 union CubeData
 {
@@ -84,6 +84,7 @@ void checkNewData(unsigned long nowTime)
   cubeData.watchdog = cubeData.watchdog + 1;
   if (cubeData.watchdog > 32760) cubeData.watchdog= 0 ;
   BlinkyPicoWCube.publishToServer();
+  BlinkyPicoWCube.loop();
   cubeData.newData = 0;
 }
 
