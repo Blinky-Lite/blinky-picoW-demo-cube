@@ -291,7 +291,15 @@ void BlinkyPicoWCube::setup_wifi()
   if (g_chattyCathy) Serial.println(g_wifiPassword);
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(g_ssid.c_str(), g_wifiPassword.c_str());
+  if (g_wifiPassword.equals("NONE"))
+  {
+    if (g_chattyCathy ) Serial.println("Connecting with no password");
+    WiFi.begin(g_ssid.c_str());
+  }
+  else
+  {
+    WiFi.begin(g_ssid.c_str(), g_wifiPassword.c_str());
+  }
   
   g_wifiLastTry = millis();
   g_wifiStatus = WiFi.status();

@@ -1,4 +1,4 @@
-boolean printDiagnostics = true;
+boolean printDiagnostics = false;
 
 union CubeData
 {
@@ -31,6 +31,7 @@ void setupServerComm()
 {
   // Optional setup to overide defaults
   if (printDiagnostics) Serial.begin(115200);
+  delay(5000);
   BlinkyPicoWCube.setChattyCathy(printDiagnostics);
   BlinkyPicoWCube.setWifiTimeoutMs(20000);
   BlinkyPicoWCube.setWifiRetryMs(20000);
