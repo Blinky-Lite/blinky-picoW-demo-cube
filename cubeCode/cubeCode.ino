@@ -10,16 +10,13 @@ struct CubeSetting
   uint8_t led2;
   uint16_t publishInterval;
 };
+CubeSetting setting;
+
 struct CubeReading
 {
   int16_t chipTemp;
 };
-struct CubeData
-{
-  CubeSetting setting;
-  CubeReading reading;
-};
-CubeData cubeData;
+CubeReading reading;
 
 int led1Pin = 14;
 int led2Pin = 17;
@@ -47,21 +44,21 @@ void setupBlinky()
   BlinkyPicoWCube.setMqttPort(1883);
   BlinkyPicoWCube.setMqttLedFlashMs(100);
   BlinkyPicoWCube.setHdwrWatchdogMs(8000);
-  BlinkyPicoWCube.begin(BLINKY_DIAG, COMM_LED_PIN, RST_BUTTON_PIN, true, sizeof(cubeData));
+  BlinkyPicoWCube.begin(BLINKY_DIAG, COMM_LED_PIN, RST_BUTTON_PIN, true, sizeof(setting), sizeof(reading));
 }
 
 void setupCube()
 {
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
-  cubeData.setting.led1 = 255;
-  cubeData.setting.led2 = 255;
-  cubeData.setting.publishInterval = 30000;
+  setting.led1 = 255;
+  setting.led2 = 255;
+  setting.publishInterval = 30000;
 
   led1 = 0;
-  led2 = 0;
-  signLed1 = 255;
-  signLed2 = 255;
+  led2 = 255;
+  signLed1 = 1;
+  signLed2 = -1;
   analogWrite(led1Pin, led1);    
   analogWrite(led2Pin, led2);   
   lastPublishTime = millis(); 
@@ -69,12 +66,12 @@ void setupCube()
 void loopCube()
 {
   unsigned long now = millis();
-  if ((now - lastPublishTime) > cubeData.setting.publishInterval)
+  if ((now - lastPublishTime) > setting.publishInterval)
   {
     lastPublishTime = now;
-    cubeData.reading.chipTemp = (int16_t) (analogReadTemp() * 100.0);
+    reading.chipTemp = (int16_t) (analogReadTemp() * 100.0);
 
-    boolean successful = publishCubeData((uint8_t*) &cubeData, false);
+    boolean successful = publishCubeData((uint8_t*) &setting, (uint8_t*) &reading, false);
   }
 
   led1 = led1 + signLed1;    
@@ -82,8 +79,8 @@ void loopCube()
   analogWrite(led1Pin, led1);    
   analogWrite(led2Pin, led2);
 
-  if (led1 == (int) cubeData.setting.led1) signLed1 = -1;
-  if (led2 == (int) cubeData.setting.led2) signLed2 = -1;
+  if (led1 == (int) setting.led1) signLed1 = -1;
+  if (led2 == (int) setting.led2) signLed2 = -1;
   if (led1 == 0) signLed1 = 1;
   if (led2 == 0) signLed2 = 1;
   delay(5);

@@ -78,7 +78,7 @@ class BlinkyPicoW
   public:
     BlinkyPicoW(boolean init, PubSubClient* mqttClient, volatile boolean* pcubeHasDataToRead, volatile boolean* pmqttHasDataToRead, volatile boolean* pforceArchiveData);
     void            loop();
-    void            begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t sizeofCubeData);
+    void            begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading);
     void            setSsid(String ssid){m_ssid = String(ssid);};
     void            setWifiPassword(String wifiPassword){m_wifiPassword = String(wifiPassword);};
     void            setMqttServer(String mqttServer){m_mqttServer = String(mqttServer);};
@@ -96,6 +96,7 @@ class BlinkyPicoW
     
     uint8_t*        m_pcubeDataSend = nullptr;
     uint8_t*        m_pcubeDataRecv = nullptr;
-    size_t          m_sizeofCubeData;
+    size_t          m_sizeofCubeSetting;
+    size_t          m_sizeofCubeReading;
     size_t          m_sizeofMqttDataHeader;
 };

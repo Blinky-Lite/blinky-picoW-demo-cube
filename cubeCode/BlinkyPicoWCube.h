@@ -31,14 +31,21 @@ void loop1()
 {
   loopCube();
 }
-boolean publishCubeData(uint8_t* pcubeData, boolean forceArchiveData)
+boolean publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReading, boolean forceArchiveData)
 {
   if (g_cubeHasDataToRead) return false;
   if (BlinkyPicoWCube.m_pcubeDataSend == nullptr) return false;
 
   uint8_t* memPtr = BlinkyPicoWCube.m_pcubeDataSend + BlinkyPicoWCube.m_sizeofMqttDataHeader;
-  uint8_t* datPtr = pcubeData;
-  for (int ii = 0; ii < BlinkyPicoWCube.m_sizeofCubeData; ++ii)
+  uint8_t* datPtr = pcubeSetting;
+  for (int ii = 0; ii < BlinkyPicoWCube.m_sizeofCubeSetting; ++ii)
+  {
+    *memPtr = *datPtr;
+    ++memPtr;
+    ++datPtr;
+  }
+  datPtr = pcubeReading;
+  for (int ii = 0; ii < BlinkyPicoWCube.m_sizeofCubeReading; ++ii)
   {
     *memPtr = *datPtr;
     ++memPtr;

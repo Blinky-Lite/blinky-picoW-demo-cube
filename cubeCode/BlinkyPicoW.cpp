@@ -23,12 +23,13 @@ BlinkyPicoW::BlinkyPicoW(boolean init,  PubSubClient* mqttClient, volatile boole
   m_sizeofMqttDataHeader = sizeof(m_mqttDataHeader);
   
 }
-void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t sizeofCubeData)
+void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading)
 {
   rp2040.wdt_begin(m_hdwrWatchdogMs);
 
-  m_sizeofCubeData = sizeofCubeData;
-  size_t sizeOfTransferData = m_sizeofCubeData + m_sizeofMqttDataHeader;
+  m_sizeofCubeSetting = cubeSetting;
+  m_sizeofCubeReading = cubeReading;
+  size_t sizeOfTransferData = m_sizeofCubeSetting + m_sizeofCubeReading + m_sizeofMqttDataHeader;
   m_pcubeDataSend = new (std::nothrow) uint8_t [sizeOfTransferData];
   m_pcubeDataRecv = new (std::nothrow) uint8_t [sizeOfTransferData];
 
@@ -222,7 +223,7 @@ void BlinkyPicoW::loop()
       ++memPtr;
       ++datPtr;
     }
-    int numBytes = m_sizeofCubeData + m_sizeofMqttDataHeader;
+    int numBytes = m_sizeofCubeSetting + m_sizeofCubeReading +  m_sizeofMqttDataHeader;
     if (m_chattyCathy) 
     {
       uint8_t* ptr = m_pcubeDataSend;
