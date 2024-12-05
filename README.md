@@ -1,2 +1,2 @@
-# blinky-picoW-cube ONE CORE
+# blinky-picoW-cube TWO CORE
 
