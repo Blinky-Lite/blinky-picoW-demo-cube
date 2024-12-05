@@ -1,6 +1,6 @@
 #include "BlinkyPicoW.h"
 
-BlinkyPicoW::BlinkyPicoW(boolean init,  PubSubClient* mqttClient, volatile boolean* pcubeHasDataToRead, volatile boolean* pmqttHasDataToRead, volatile boolean* pforceArchiveData)
+BlinkyPicoW::BlinkyPicoW(boolean init,  PubSubClient* mqttClient, volatile boolean* pcubeHasDataToRead, volatile boolean* pmqttHasDataToRead, volatile boolean* pforceArchiveData, volatile boolean* pinitSettings)
 {
   m_init = init;
   m_resetButtonValue = LOW;
@@ -9,7 +9,7 @@ BlinkyPicoW::BlinkyPicoW(boolean init,  PubSubClient* mqttClient, volatile boole
   m_webPageServed = false;
   m_webPageRead = false;
   m_mqttClient = mqttClient;
-  m_mqttDataHeader.state = 1;
+  m_mqttDataHeader.state = 0;
   m_mqttDataHeader.forceArchiveData = 0;
   m_mqttDataHeader.watchdog = 0;
   for (int ii = 0; ii < 6; ++ii)
@@ -20,6 +20,7 @@ BlinkyPicoW::BlinkyPicoW(boolean init,  PubSubClient* mqttClient, volatile boole
   m_pcubeHasDataToRead = pcubeHasDataToRead;
   m_pmqttHasDataToRead = pmqttHasDataToRead;
   m_pforceArchiveData  = pforceArchiveData;
+  m_pinitSettings  = pinitSettings;
   m_sizeofMqttDataHeader = sizeof(m_mqttDataHeader);
   
 }
@@ -139,7 +140,7 @@ void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boo
     Serial.println("");
   }
   m_mqttClient->setServer(m_mqttServer.c_str(),m_mqttPort);
-  m_mqttClient->setCallback (mqttCallback);
+  m_mqttClient->setCallback (subscribeCubeData);
   m_mqttClient->setKeepAlive(m_mqttKeepAlive);
   m_mqttClient->setSocketTimeout(m_mqttSocketTimeout);
 
@@ -203,13 +204,16 @@ void BlinkyPicoW::loop()
   if (m_wifiStatus != WL_CONNECTED)
   {
     if (m_chattyCathy) Serial.println("Wifi disconnected. Restarting Wifi.");
-    return;
+    setup_wifi();
+//    return;
   }
   checkMqttConnection();
   m_mqttClient->loop();
   if (*m_pcubeHasDataToRead)
   {
     if (m_chattyCathy) Serial.println("Publishing MQTT data....");
+    m_mqttDataHeader.state = 0;
+    if(*m_pinitSettings) m_mqttDataHeader.state = 1;
     m_mqttDataHeader.forceArchiveData = 0;
     if(*m_pforceArchiveData) m_mqttDataHeader.forceArchiveData = 1;
     m_mqttDataHeader.watchdog = m_mqttDataHeader.watchdog + 1;
@@ -243,8 +247,6 @@ void BlinkyPicoW::loop()
       if (m_chattyCathy) Serial.println("successful!");
       setCommLEDPin(true);
       m_lastMqttPublishTime = nowTime;
-
-
     }
     else
     {
@@ -815,7 +817,4 @@ void BlinkyPicoW::checkMqttConnection()
   if (m_chattyCathy)  Serial.println("    Too many MQTT attempts. Rebooting...");
   delay(1000);
   rp2040.reboot();
-}
-void mqttCallback(char* topic, byte* payload, unsigned int length) 
-{
 }

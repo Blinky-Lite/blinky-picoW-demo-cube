@@ -13,7 +13,7 @@
 #include <LittleFS.h>
 #include <PubSubClient.h>  
 
-void   mqttCallback(char* topic, byte* payload, unsigned int length);
+void   subscribeCubeData(char* topic, byte* payload, unsigned int length);
 
 struct BlinkyPicoWDataHeader
 {
@@ -31,6 +31,7 @@ class BlinkyPicoW
     volatile boolean*        m_pcubeHasDataToRead;
     volatile boolean*        m_pmqttHasDataToRead;
     volatile boolean*        m_pforceArchiveData;
+    volatile boolean*        m_pinitSettings;
      
     String          m_ssid = "ssid";
     String          m_wifiPassword = "wifiPassword";
@@ -76,7 +77,7 @@ class BlinkyPicoW
     void            checkMqttConnection(); 
 
   public:
-    BlinkyPicoW(boolean init, PubSubClient* mqttClient, volatile boolean* pcubeHasDataToRead, volatile boolean* pmqttHasDataToRead, volatile boolean* pforceArchiveData);
+    BlinkyPicoW(boolean init, PubSubClient* mqttClient, volatile boolean* pcubeHasDataToRead, volatile boolean* pmqttHasDataToRead, volatile boolean* pforceArchiveData, volatile boolean* pinitSettings);
     void            loop();
     void            begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading);
     void            setSsid(String ssid){m_ssid = String(ssid);};

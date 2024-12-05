@@ -14,7 +14,7 @@ CubeSetting setting;
 
 struct CubeReading
 {
-  int16_t chipTemp;
+  float chipTemp;
 };
 CubeReading reading;
 
@@ -53,7 +53,7 @@ void setupCube()
   pinMode(led2Pin, OUTPUT);
   setting.led1 = 255;
   setting.led2 = 255;
-  setting.publishInterval = 30000;
+  setting.publishInterval = 3000;
 
   led1 = 0;
   led2 = 255;
@@ -69,7 +69,7 @@ void loopCube()
   if ((now - lastPublishTime) > setting.publishInterval)
   {
     lastPublishTime = now;
-    reading.chipTemp = (int16_t) (analogReadTemp() * 100.0);
+    reading.chipTemp = analogReadTemp();
 
     boolean successful = publishCubeData((uint8_t*) &setting, (uint8_t*) &reading, false);
   }
@@ -79,10 +79,10 @@ void loopCube()
   analogWrite(led1Pin, led1);    
   analogWrite(led2Pin, led2);
 
-  if (led1 == (int) setting.led1) signLed1 = -1;
-  if (led2 == (int) setting.led2) signLed2 = -1;
+  if (led1 >= (int) setting.led1) signLed1 = -1;
+  if (led2 >= (int) setting.led2) signLed2 = -1;
   if (led1 == 0) signLed1 = 1;
   if (led2 == 0) signLed2 = 1;
   delay(5);
-
+  retrieveCubeSetting((uint8_t*) &setting);
 }
