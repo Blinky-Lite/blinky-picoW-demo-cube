@@ -9,7 +9,7 @@ BlinkyPicoW::BlinkyPicoW(boolean init,  PubSubClient* mqttClient, volatile boole
   m_webPageServed = false;
   m_webPageRead = false;
   m_mqttClient = mqttClient;
-  m_mqttDataHeader.state = 0;
+  m_mqttDataHeader.state = 1;
   m_mqttDataHeader.forceArchiveData = 0;
   m_mqttDataHeader.watchdog = 0;
   for (int ii = 0; ii < 6; ++ii)
