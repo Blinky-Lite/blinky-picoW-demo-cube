@@ -1,13 +1,13 @@
 #include "Arduino.h"
-#include "BlinkyPicoW.h"
+#include "BlinkyPicoWMqtt.h"
 
-BlinkyPicoW::BlinkyPicoW(PubSubClient* pmqttClient)
+BlinkyPicoWMqtt::BlinkyPicoWMqtt(PubSubClient* pmqttClient)
 {
   m_pmqttClient = pmqttClient;
   m_sizeofMqttDataHeader = sizeof(m_mqttDataHeader);
 
 }
-void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading)
+void BlinkyPicoWMqtt::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading)
 {
   m_chattyCathy = false;
   if (chattyCathy > 0) m_chattyCathy = true;
@@ -132,7 +132,7 @@ void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boo
   
   return;
 }
-void BlinkyPicoW::resetButtonPressed()
+void BlinkyPicoWMqtt::resetButtonPressed()
 {
   if (m_wifiAccessPointMode) return;
   if (!m_useFlashStorage)
@@ -161,7 +161,7 @@ void BlinkyPicoW::resetButtonPressed()
   m_webPageServed = false;
   m_webPageRead = false;
 }
-void BlinkyPicoW::setup_wifi() 
+void BlinkyPicoWMqtt::setup_wifi() 
 {
   if (m_chattyCathy) Serial.println();
   if (m_chattyCathy) Serial.println("Starting Communications");
@@ -291,7 +291,7 @@ void BlinkyPicoW::setup_wifi()
   }
 
 }
-void BlinkyPicoW::checkMqttConnection() 
+void BlinkyPicoWMqtt::checkMqttConnection() 
 {
   boolean connected = m_pmqttClient->connected();
   if (connected) return;
@@ -419,7 +419,7 @@ void BlinkyPicoW::checkMqttConnection()
   delay(1000);
   rp2040.reboot();
 }
-void BlinkyPicoW::loop()
+void BlinkyPicoWMqtt::loop()
 {
   rp2040.wdt_reset();;
   unsigned long nowTime = millis();
@@ -534,7 +534,7 @@ void BlinkyPicoW::loop()
   delay(1);
   return;
 }
-void BlinkyPicoW::readWebPage()
+void BlinkyPicoWMqtt::readWebPage()
 {
   if (!m_webPageServed) return;
   if (m_webPageRead) return;
@@ -663,7 +663,7 @@ void BlinkyPicoW::readWebPage()
     }
   }
 }
-void BlinkyPicoW::serveWebPage()
+void BlinkyPicoWMqtt::serveWebPage()
 {
   if (m_webPageServed) return;
   WiFiClient client = m_wifiServer->accept();
@@ -777,7 +777,7 @@ void BlinkyPicoW::serveWebPage()
     client.stop();
   }
 }
-String BlinkyPicoW::replaceHtmlEscapeChar(String inString)
+String BlinkyPicoWMqtt::replaceHtmlEscapeChar(String inString)
 {
   String outString = "";
   char hexBuff[3];
@@ -799,7 +799,7 @@ String BlinkyPicoW::replaceHtmlEscapeChar(String inString)
   }
   return outString;
 }
-boolean BlinkyPicoW::publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReading, boolean forceArchiveData)
+boolean BlinkyPicoWMqtt::publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReading, boolean forceArchiveData)
 {
   if (m_cubeHasDataToRead) return false;
   if (m_pcubeDataSend == nullptr) return false;
@@ -824,7 +824,7 @@ boolean BlinkyPicoW::publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReadin
   m_cubeHasDataToRead = true;
   return true;
 }
-void BlinkyPicoW::subscribeCubeData(char* topic, byte* payload, unsigned int length) 
+void BlinkyPicoWMqtt::subscribeCubeData(char* topic, byte* payload, unsigned int length) 
 {
   if (m_mqttHasDataToRead) return;
   unsigned int dataLength = m_sizeofMqttDataHeader + m_sizeofCubeSetting + m_sizeofCubeReading;
@@ -853,7 +853,7 @@ void BlinkyPicoW::subscribeCubeData(char* topic, byte* payload, unsigned int len
   m_mqttHasDataToRead = true;
   return;  
 }
-boolean BlinkyPicoW::retrieveCubeSetting(uint8_t* pcubeSetting)
+boolean BlinkyPicoWMqtt::retrieveCubeSetting(uint8_t* pcubeSetting)
 {
   if (!m_mqttHasDataToRead) return false;
   uint8_t* memPtr = m_pcubeDataRecv + m_sizeofMqttDataHeader;

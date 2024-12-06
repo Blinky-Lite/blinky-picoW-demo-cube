@@ -1,11 +1,11 @@
-#ifndef BlinkyPicoWSetup_h
-#define BlinkyPicoWSetup_h
+#ifndef BlinkyPicoW_h
+#define BlinkyPicoW_h
 bool core1_separate_stack = true;
-#include "BlinkyPicoW.h"
+#include "BlinkyPicoWMqtt.h"
 WiFiClient g_wifiClient;
 PubSubClient g_mqttClient(g_wifiClient);
 
-BlinkyPicoW BlinkyPicoW(&g_mqttClient);
+BlinkyPicoWMqtt BlinkyPicoW(&g_mqttClient);
 void setupBlinky();
 void setupCube();
 void loopCube();

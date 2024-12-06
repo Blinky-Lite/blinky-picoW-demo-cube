@@ -1,5 +1,5 @@
-#ifndef BlinkyPicoW_h
-#define BlinkyPicoW_h
+#ifndef BlinkyPicoWMqtt_h
+#define BlinkyPicoWMqtt_h
 
 #include "Arduino.h"
 #include <WiFi.h>
@@ -18,7 +18,7 @@
 #define MQTT_PORT                   1883
 #define MQTT_RETRY                  3000
 
-struct BlinkyPicoWDataHeader
+struct BlinkyPicoWMqttDataHeader
 {
   uint8_t  state;
   uint8_t  forceArchiveData;
@@ -27,7 +27,7 @@ struct BlinkyPicoWDataHeader
   uint8_t  routerMac[6];
 }; 
 void mqttSubscribe(char* topic, byte* payload, unsigned int length);
-class BlinkyPicoW
+class BlinkyPicoWMqtt
 {
   private:
     boolean                 m_useFlashStorage = true;
@@ -39,7 +39,7 @@ class BlinkyPicoW
     int                     m_resetButtonValue = LOW;
     PubSubClient*           m_pmqttClient;
 
-    BlinkyPicoWDataHeader   m_mqttDataHeader;
+    BlinkyPicoWMqttDataHeader   m_mqttDataHeader;
     volatile boolean        m_cubeHasDataToRead = true;
     volatile boolean        m_mqttHasDataToRead = true;
     volatile boolean        m_forceArchiveData = true;
@@ -84,7 +84,7 @@ class BlinkyPicoW
     String          replaceHtmlEscapeChar(String inString);
 
   public:
-    BlinkyPicoW(PubSubClient* pmqttClient);
+    BlinkyPicoWMqtt(PubSubClient* pmqttClient);
     void            loop();
     void            begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading);
     boolean         publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReading, boolean forceArchiveData);

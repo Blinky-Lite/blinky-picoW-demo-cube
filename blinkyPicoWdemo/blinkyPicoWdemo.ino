@@ -1,7 +1,7 @@
 #define BLINKY_DIAG         1
 #define COMM_LED_PIN       16
 #define RST_BUTTON_PIN     15
-#include "BlinkyPicoWSetup.h"
+#include "BlinkyPicoW.h"
 
 struct CubeSetting
 {
