@@ -1,26 +1,27 @@
 #include "Arduino.h"
 #include "BlinkyPicoW.h"
 
-BlinkyPicoW::BlinkyPicoW(PubSubClient* pmqttClient)
+BlinkyPicoW::BlinkyPicoW(boolean init)
 {
-  m_pmqttClient = pmqttClient;
+  m_init = init;
+  m_resetButtonValue = LOW;
+  m_resetButtonSwitchTime = 0;
+  m_wifiAccessPointMode = false;
+  m_webPageServed = false;
+  m_webPageRead = false;
+  m_mqttDataHeader.state = 0;
+  m_mqttDataHeader.forceArchiveData = 0;
+  m_mqttDataHeader.watchdog = 0;
+  for (int ii = 0; ii < 6; ++ii)
+  {
+    m_mqttDataHeader.deviceMac[ii] = 0;
+    m_mqttDataHeader.routerMac[ii] = 0;
+  }
   m_sizeofMqttDataHeader = sizeof(m_mqttDataHeader);
-
+  
 }
 void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boolean useFlashStorage, size_t cubeSetting, size_t cubeReading)
 {
-  m_chattyCathy = false;
-  if (chattyCathy > 0) m_chattyCathy = true;
-  m_commLEDPin = commLEDPin;
-  pinMode(m_commLEDPin, OUTPUT);
-  setCommLEDPin(false);
-  m_resetButtonPin = resetButtonPin;
-  if (m_resetButtonPin > 0 )
-  { 
-    pinMode(m_resetButtonPin, INPUT);
-  }
-  m_useFlashStorage = useFlashStorage;
-
   rp2040.wdt_begin(m_hdwrWatchdogMs);
 
   m_sizeofCubeSetting = cubeSetting;
@@ -32,6 +33,17 @@ void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boo
   m_cubeHasDataToRead = false;
   m_mqttHasDataToRead = false;
 
+  m_chattyCathy = false;
+  if (chattyCathy > 0) m_chattyCathy = true;
+  m_commLEDPin = commLEDPin;
+  pinMode(m_commLEDPin, OUTPUT);
+  setCommLEDPin(false);
+  m_resetButtonPin = resetButtonPin;
+  if (m_resetButtonPin > 0 )
+  { 
+    pinMode(m_resetButtonPin, INPUT);
+  }
+  m_useFlashStorage = useFlashStorage;
   int idot = 0;
   while (idot < STARTUP_DELAY)
   {
@@ -123,43 +135,130 @@ void BlinkyPicoW::begin(int chattyCathy, int commLEDPin, int resetButtonPin, boo
     Serial.println(m_mqttSubscribeTopic);
     Serial.println("");
   }
-  m_pmqttClient->setServer(m_mqttServer.c_str(),m_mqttPort);
-  m_pmqttClient->setCallback (mqttSubscribe);
-  m_pmqttClient->setKeepAlive(m_mqttKeepAlive);
-  m_pmqttClient->setSocketTimeout(m_mqttSocketTimeout);
+  m_mqttClient.setServer(m_mqttServer.c_str(),m_mqttPort);
+  m_mqttClient.setCallback (mqttSubscribe);
+  m_mqttClient.setKeepAlive(m_mqttKeepAlive);
+  m_mqttClient.setSocketTimeout(m_mqttSocketTimeout);
 
   setup_wifi();
   
   return;
 }
-void BlinkyPicoW::resetButtonPressed()
-{
-  if (m_wifiAccessPointMode) return;
-  if (!m_useFlashStorage)
-  {
-    if (m_chattyCathy)  Serial.println("Rebooting...");
-    delay(1000);
-    rp2040.reboot();
-  }
-  setCommLEDPin(true);
-  WiFi.disconnect();
-  WiFi.mode(WIFI_AP);
-  IPAddress local_IP(192,168,42,1);
-  IPAddress gateway(192,168,42,1);
-  IPAddress subnet(255,255,255,0);
-  WiFi.softAPConfig(local_IP, gateway, subnet);
 
-  WiFi.softAP(m_trayType + "-" + m_trayName);
-  if (m_chattyCathy)
+void BlinkyPicoW::loop()
+{
+  rp2040.wdt_reset();;
+  unsigned long nowTime = millis();
+  if (m_wifiAccessPointMode)
   {
-    Serial.print("Access Point Created with IP Gateway ");
-    Serial.println(WiFi.softAPIP());
+    serveWebPage();
+    readWebPage();
+    rp2040.wdt_reset();;
+    delay(100);
+    return;
   }
-  m_wifiServer = new WiFiServer(80);
-  m_wifiAccessPointMode = true;
-  m_wifiServer->begin();
-  m_webPageServed = false;
-  m_webPageRead = false;
+// Check reset button
+  if (m_resetButtonPin > 0 )
+  {
+    int pinValue = digitalRead(m_resetButtonPin);
+    if (pinValue != m_resetButtonValue)
+    {
+      if((nowTime - m_resetButtonSwitchTime) > DEBOUNCE_TIME)
+      {
+        m_resetButtonValue = pinValue;
+        m_resetButtonSwitchTime = nowTime;
+        if (m_chattyCathy)
+        {
+          if (m_resetButtonValue == HIGH)
+          {
+            Serial.print("Reset Button Pressed. ");
+          }
+          else
+          {
+            Serial.println("Reset Button Released");
+          }
+        }
+      }
+    }
+    if (m_resetButtonValue == HIGH)
+    {
+      if((nowTime - m_resetButtonSwitchTime) > RESET_TIMEOUT)
+      {
+        if (m_chattyCathy)
+        {
+          Serial.print("Reset Button held down for ");
+          Serial.print(RESET_TIMEOUT);
+          Serial.println(" mS");
+        }
+        resetButtonPressed();
+        return;
+      }
+    }
+  }
+// check wifi
+  m_wifiStatus =  WiFi.status();
+  if (m_wifiStatus != WL_CONNECTED)
+  {
+    if (m_chattyCathy) Serial.println("Wifi disconnected. Restarting Wifi.");
+    setup_wifi();
+//    return;
+  }
+  checkMqttConnection();
+  m_mqttClient.loop();
+  if (m_cubeHasDataToRead)
+  {
+    if (m_chattyCathy) Serial.println("Publishing MQTT data....");
+    m_mqttDataHeader.state = 0;
+    if(m_initSettings) m_mqttDataHeader.state = 1;
+    m_mqttDataHeader.forceArchiveData = 0;
+    if(m_forceArchiveData) m_mqttDataHeader.forceArchiveData = 1;
+    m_mqttDataHeader.watchdog = m_mqttDataHeader.watchdog + 1;
+    if (m_mqttDataHeader.watchdog > 65534) m_mqttDataHeader.watchdog = 0;
+    
+    uint8_t* memPtr = m_pcubeDataSend;
+    uint8_t* datPtr = (uint8_t*) &m_mqttDataHeader;
+    for (int ii = 0; ii < m_sizeofMqttDataHeader; ++ii)
+    {
+      *memPtr = *datPtr;
+      ++memPtr;
+      ++datPtr;
+    }
+    int numBytes = m_sizeofCubeSetting + m_sizeofCubeReading +  m_sizeofMqttDataHeader;
+    if (m_chattyCathy) 
+    {
+      uint8_t* ptr = m_pcubeDataSend;
+      for (int ii = 0; ii < numBytes; ++ii)
+      {
+        Serial.print("    ptr: ");
+        Serial.print((uint32_t) ptr);
+        Serial.print(" byte: ");
+        Serial.println((uint8_t) *ptr);
+        ++ptr;
+      }
+    }
+    if(m_mqttClient.publish(m_mqttPublishTopic.c_str(), m_pcubeDataSend, numBytes))
+    {
+      m_cubeHasDataToRead = false;
+      m_forceArchiveData = false;
+      if (m_chattyCathy) Serial.println("successful!");
+      setCommLEDPin(true);
+      m_lastMqttPublishTime = nowTime;
+    }
+    else
+    {
+      if (m_chattyCathy) Serial.println("failed.");
+    }
+ 
+  }
+  if (m_commLEDState)
+  {
+    if ((nowTime - m_lastMqttPublishTime) > m_mqttLedFlashMs) 
+    {
+      setCommLEDPin(false);
+    }
+  }
+  delay(1);
+  return;
 }
 void BlinkyPicoW::setup_wifi() 
 {
@@ -280,6 +379,7 @@ void BlinkyPicoW::setup_wifi()
       Serial.println(m_mqttDataHeader.deviceMac[5],HEX);
       Serial.println("");
     }
+    m_init = false;
     checkMqttConnection();    
 
   }
@@ -291,248 +391,34 @@ void BlinkyPicoW::setup_wifi()
   }
 
 }
-void BlinkyPicoW::checkMqttConnection() 
+void BlinkyPicoW::resetButtonPressed()
 {
-  boolean connected = m_pmqttClient->connected();
-  if (connected) return;
-  if (m_chattyCathy) 
+  if (m_wifiAccessPointMode) return;
+  if (!m_useFlashStorage)
   {
-    Serial.println();
-    Serial.println("Connecting to MQTT Broker");
+    if (m_chattyCathy)  Serial.println("Rebooting...");
+    delay(1000);
+    rp2040.reboot();
   }
-  int itry = 0;
-  String mqttClientId = m_trayType + "-" + m_trayName;
-  while (itry < MAX_NO_CONNECTION_ATTEMPTS)
+  setCommLEDPin(true);
+  WiFi.disconnect();
+  WiFi.mode(WIFI_AP);
+  IPAddress local_IP(192,168,42,1);
+  IPAddress gateway(192,168,42,1);
+  IPAddress subnet(255,255,255,0);
+  WiFi.softAPConfig(local_IP, gateway, subnet);
+
+  WiFi.softAP(m_trayType + "-" + m_trayName);
+  if (m_chattyCathy)
   {
-    itry = itry + 1;
-    if (m_chattyCathy) 
-    {
-      Serial.print("    Attempt: ");
-      Serial.print(itry);
-      Serial.print("/");
-      Serial.print(MAX_NO_CONNECTION_ATTEMPTS);
-      Serial.print(". Connecting to ");
-      Serial.print(m_mqttServer);
-      Serial.print(":");
-      Serial.print(m_mqttPort);
-      Serial.print(" with user: ");
-      Serial.print(m_mqttUsername);
-      Serial.print(" and password: ");
-      Serial.println(m_mqttPassword);
-      Serial.print("    MQTT ID: ");
-      Serial.println(mqttClientId);
-      delay(10);
-    }
-    rp2040.wdt_reset();
-    connected = m_pmqttClient->connect(mqttClientId.c_str(),m_mqttUsername.c_str(), m_mqttPassword.c_str());
-    rp2040.wdt_reset();
-    if (connected) 
-    {
-      if (m_chattyCathy) Serial.println("    MQTT connected");
-      m_pmqttClient->subscribe(m_mqttSubscribeTopic.c_str());
-//      m_pmqttClient->publish(m_mqttPublishTopic.c_str(),"hello world");
- 
-      return;
-    }
-    else
-    { 
-      m_wifiStatus =  WiFi.status();
-      if (m_wifiStatus != WL_CONNECTED)
-      {
-        if (m_chattyCathy) Serial.println("    Wifi disconnected. Restarting Wifi.");
-        setup_wifi();
-        return;
-      }
-      int mqttState = m_pmqttClient->state();
-      if (m_chattyCathy) 
-      {
-        Serial.print("    MQTT connection");
-        Serial.print(" failed, rc=");
-        Serial.print(mqttState);
-        Serial.print(": ");
-        switch (mqttState) 
-        {
-          case -4:
-            Serial.println("MQTT_CONNECTION_TIMEOUT");
-            break;
-          case -3:
-            Serial.println("MQTT_CONNECTION_LOST");
-            break;
-          case -2:
-            Serial.println("MQTT_CONNECT_FAILED");
-            break;
-          case -1:
-            Serial.println("MQTT_DISCONNECTED");
-            break;
-          case 0:
-            Serial.println("MQTT_CONNECTED");
-            break;
-          case 1:
-            Serial.println("MQTT_CONNECT_BAD_PROTOCOL");
-            break;
-          case 2:
-            Serial.println("MQTT_CONNECT_BAD_CLIENT_ID");
-            break;
-          case 3:
-            Serial.println("MQTT_CONNECT_UNAVAILABLE");
-            break;
-          case 4:
-            Serial.println("MQTT_CONNECT_BAD_CREDENTIALS");
-            break;
-          case 5:
-            Serial.println("MQTT_CONNECT_UNAUTHORIZED");
-            break;
-          default:
-            break;
-        }
-        Serial.print("    Waiting ");
-        Serial.print(MQTT_RETRY);
-        Serial.print(" mS to retry.");
-      }     
-      int iwait = 0;
-      while (iwait < MQTT_RETRY)
-      {
-        rp2040.wdt_reset();;
-        delay(500);
-        iwait = iwait + 500;
-        if (m_chattyCathy) Serial.print(".");
-        setCommLEDPin(!m_commLEDState);
-        if (m_resetButtonPin > 0 )
-        {
-          if (digitalRead(m_resetButtonPin) == HIGH)
-          {
-            if (m_chattyCathy)
-            {
-              Serial.println("");
-              Serial.println("Reset Button Pressed. ");
-            }
-            resetButtonPressed();
-            return;
-          }
-        }
-      }
-      if (m_chattyCathy) Serial.println("");
-      setCommLEDPin(false);
-    }
+    Serial.print("Access Point Created with IP Gateway ");
+    Serial.println(WiFi.softAPIP());
   }
-  if (m_chattyCathy)  Serial.println("    Too many MQTT attempts. Rebooting...");
-  delay(1000);
-  rp2040.reboot();
-}
-void BlinkyPicoW::loop()
-{
-  rp2040.wdt_reset();;
-  unsigned long nowTime = millis();
-  if (m_wifiAccessPointMode)
-  {
-    serveWebPage();
-    readWebPage();
-    rp2040.wdt_reset();;
-    delay(100);
-    return;
-  }
-// Check reset button
-  if (m_resetButtonPin > 0 )
-  {
-    int pinValue = digitalRead(m_resetButtonPin);
-    if (pinValue != m_resetButtonValue)
-    {
-      if((nowTime - m_resetButtonSwitchTime) > DEBOUNCE_TIME)
-      {
-        m_resetButtonValue = pinValue;
-        m_resetButtonSwitchTime = nowTime;
-        if (m_chattyCathy)
-        {
-          if (m_resetButtonValue == HIGH)
-          {
-            Serial.print("Reset Button Pressed. ");
-          }
-          else
-          {
-            Serial.println("Reset Button Released");
-          }
-        }
-      }
-    }
-    if (m_resetButtonValue == HIGH)
-    {
-      if((nowTime - m_resetButtonSwitchTime) > RESET_TIMEOUT)
-      {
-        if (m_chattyCathy)
-        {
-          Serial.print("Reset Button held down for ");
-          Serial.print(RESET_TIMEOUT);
-          Serial.println(" mS");
-        }
-        resetButtonPressed();
-        return;
-      }
-    }
-  }
-// check wifi
-  m_wifiStatus =  WiFi.status();
-  if (m_wifiStatus != WL_CONNECTED)
-  {
-    if (m_chattyCathy) Serial.println("Wifi disconnected. Restarting Wifi.");
-    setup_wifi();
-//    return;
-  }
-  checkMqttConnection();
-  m_pmqttClient->loop();
-  if (m_cubeHasDataToRead)
-  {
-    if (m_chattyCathy) Serial.println("Publishing MQTT data....");
-    m_mqttDataHeader.state = 0;
-    if(m_initSettings) m_mqttDataHeader.state = 1;
-    m_mqttDataHeader.forceArchiveData = 0;
-    if(m_forceArchiveData) m_mqttDataHeader.forceArchiveData = 1;
-    m_mqttDataHeader.watchdog = m_mqttDataHeader.watchdog + 1;
-    if (m_mqttDataHeader.watchdog > 65534) m_mqttDataHeader.watchdog = 0;
-    
-    uint8_t* memPtr = m_pcubeDataSend;
-    uint8_t* datPtr = (uint8_t*) &m_mqttDataHeader;
-    for (int ii = 0; ii < m_sizeofMqttDataHeader; ++ii)
-    {
-      *memPtr = *datPtr;
-      ++memPtr;
-      ++datPtr;
-    }
-    int numBytes = m_sizeofCubeSetting + m_sizeofCubeReading +  m_sizeofMqttDataHeader;
-    if (m_chattyCathy) 
-    {
-      uint8_t* ptr = m_pcubeDataSend;
-      for (int ii = 0; ii < numBytes; ++ii)
-      {
-        Serial.print("    ptr: ");
-        Serial.print((uint32_t) ptr);
-        Serial.print(" byte: ");
-        Serial.println((uint8_t) *ptr);
-        ++ptr;
-      }
-    }
-    if(m_pmqttClient->publish(m_mqttPublishTopic.c_str(), m_pcubeDataSend, numBytes))
-    {
-      m_cubeHasDataToRead = false;
-      m_forceArchiveData = false;
-      if (m_chattyCathy) Serial.println("successful!\n");
-      setCommLEDPin(true);
-      m_lastMqttPublishTime = nowTime;
-    }
-    else
-    {
-      if (m_chattyCathy) Serial.println("failed.");
-    }
- 
-  }
-  if (m_commLEDState)
-  {
-    if ((nowTime - m_lastMqttPublishTime) > m_mqttLedFlashMs) 
-    {
-      setCommLEDPin(false);
-    }
-  }
-  delay(1);
-  return;
+  m_wifiServer = new WiFiServer(80);
+  m_wifiAccessPointMode = true;
+  m_wifiServer->begin();
+  m_webPageServed = false;
+  m_webPageRead = false;
 }
 void BlinkyPicoW::readWebPage()
 {
@@ -799,6 +685,135 @@ String BlinkyPicoW::replaceHtmlEscapeChar(String inString)
   }
   return outString;
 }
+
+void BlinkyPicoW::checkMqttConnection() 
+{
+  boolean connected = m_mqttClient.connected();
+  if (connected) return;
+  if (m_chattyCathy) 
+  {
+    Serial.println();
+    Serial.println("Connecting to MQTT Broker");
+  }
+  int itry = 0;
+  String mqttClientId = m_trayType + "-" + m_trayName;
+  while (itry < MAX_NO_CONNECTION_ATTEMPTS)
+  {
+    itry = itry + 1;
+    if (m_chattyCathy) 
+    {
+      Serial.print("    Attempt: ");
+      Serial.print(itry);
+      Serial.print("/");
+      Serial.print(MAX_NO_CONNECTION_ATTEMPTS);
+      Serial.print(". Connecting to ");
+      Serial.print(m_mqttServer);
+      Serial.print(":");
+      Serial.print(m_mqttPort);
+      Serial.print(" with user: ");
+      Serial.print(m_mqttUsername);
+      Serial.print(" and password: ");
+      Serial.println(m_mqttPassword);
+      Serial.print("    MQTT ID: ");
+      Serial.println(mqttClientId);
+      delay(10);
+    }
+    rp2040.wdt_reset();
+    connected = m_mqttClient.connect(mqttClientId.c_str(),m_mqttUsername.c_str(), m_mqttPassword.c_str());
+    rp2040.wdt_reset();
+    if (connected) 
+    {
+      if (m_chattyCathy) Serial.println("    MQTT connected");
+      m_mqttClient.subscribe(m_mqttSubscribeTopic.c_str());
+//      m_mqttClient.publish(m_mqttPublishTopic.c_str(),"hello world");
+ 
+      return;
+    }
+    else
+    { 
+      m_wifiStatus =  WiFi.status();
+      if (m_wifiStatus != WL_CONNECTED)
+      {
+        if (m_chattyCathy) Serial.println("    Wifi disconnected. Restarting Wifi.");
+        setup_wifi();
+        return;
+      }
+      int mqttState = m_mqttClient.state();
+      if (m_chattyCathy) 
+      {
+        Serial.print("    MQTT connection");
+        Serial.print(" failed, rc=");
+        Serial.print(mqttState);
+        Serial.print(": ");
+        switch (mqttState) 
+        {
+          case -4:
+            Serial.println("MQTT_CONNECTION_TIMEOUT");
+            break;
+          case -3:
+            Serial.println("MQTT_CONNECTION_LOST");
+            break;
+          case -2:
+            Serial.println("MQTT_CONNECT_FAILED");
+            break;
+          case -1:
+            Serial.println("MQTT_DISCONNECTED");
+            break;
+          case 0:
+            Serial.println("MQTT_CONNECTED");
+            break;
+          case 1:
+            Serial.println("MQTT_CONNECT_BAD_PROTOCOL");
+            break;
+          case 2:
+            Serial.println("MQTT_CONNECT_BAD_CLIENT_ID");
+            break;
+          case 3:
+            Serial.println("MQTT_CONNECT_UNAVAILABLE");
+            break;
+          case 4:
+            Serial.println("MQTT_CONNECT_BAD_CREDENTIALS");
+            break;
+          case 5:
+            Serial.println("MQTT_CONNECT_UNAUTHORIZED");
+            break;
+          default:
+            break;
+        }
+        Serial.print("    Waiting ");
+        Serial.print(MQTT_RETRY);
+        Serial.print(" mS to retry.");
+      }     
+      int iwait = 0;
+      while (iwait < MQTT_RETRY)
+      {
+        rp2040.wdt_reset();;
+        delay(500);
+        iwait = iwait + 500;
+        if (m_chattyCathy) Serial.print(".");
+        setCommLEDPin(!m_commLEDState);
+        if (m_resetButtonPin > 0 )
+        {
+          if (digitalRead(m_resetButtonPin) == HIGH)
+          {
+            if (m_chattyCathy)
+            {
+              Serial.println("");
+              Serial.println("Reset Button Pressed. ");
+            }
+            resetButtonPressed();
+            return;
+          }
+        }
+      }
+      if (m_chattyCathy) Serial.println("");
+      setCommLEDPin(false);
+    }
+  }
+  if (m_chattyCathy)  Serial.println("    Too many MQTT attempts. Rebooting...");
+  delay(1000);
+  rp2040.reboot();
+}
 boolean BlinkyPicoW::publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReading, boolean forceArchiveData)
 {
   if (m_cubeHasDataToRead) return false;
@@ -824,38 +839,9 @@ boolean BlinkyPicoW::publishCubeData(uint8_t* pcubeSetting, uint8_t* pcubeReadin
   m_cubeHasDataToRead = true;
   return true;
 }
-void BlinkyPicoW::subscribeCubeData(char* topic, byte* payload, unsigned int length) 
+void BlinkyPicoW::retrieveCubeSetting(uint8_t* pcubeSetting)
 {
-  if (m_mqttHasDataToRead) return;
-  unsigned int dataLength = m_sizeofMqttDataHeader + m_sizeofCubeSetting + m_sizeofCubeReading;
-  if (dataLength != length) return;
-  uint8_t* memPtr = m_pcubeDataRecv;
-  uint8_t* datPtr = (uint8_t*) payload;
-  if (m_chattyCathy) 
-  {
-    Serial.println("");
-    Serial.println("Receiving MQTT data....");
-  }
-  for (int ii = 0; ii < dataLength; ++ii)
-  {
-    if (m_chattyCathy) 
-    {
-        Serial.print("    ptr: ");
-        Serial.print((uint32_t) memPtr);
-        Serial.print(" byte: ");
-        Serial.println((uint8_t) *datPtr);
-    }
-    *memPtr = *datPtr;
-    ++memPtr;
-    ++datPtr;
-  }
-  if (m_chattyCathy) Serial.println("");
-  m_mqttHasDataToRead = true;
-  return;  
-}
-boolean BlinkyPicoW::retrieveCubeSetting(uint8_t* pcubeSetting)
-{
-  if (!m_mqttHasDataToRead) return false;
+  if (!m_mqttHasDataToRead) return;
   uint8_t* memPtr = m_pcubeDataRecv + m_sizeofMqttDataHeader;
   uint8_t* datPtr = pcubeSetting;
   for (int ii = 0; ii < m_sizeofCubeSetting; ++ii)
@@ -866,5 +852,20 @@ boolean BlinkyPicoW::retrieveCubeSetting(uint8_t* pcubeSetting)
   }
   m_mqttHasDataToRead = false;
   m_initSettings = false;
-  return true;
+}
+void BlinkyPicoW::subscribeCubeData(char* topic, byte* payload, unsigned int length) 
+{
+  if (m_mqttHasDataToRead) return;
+  unsigned int dataLength = m_sizeofMqttDataHeader + m_sizeofCubeSetting + m_sizeofCubeReading;
+  if (dataLength != length) return;
+  uint8_t* memPtr = m_pcubeDataRecv;
+  uint8_t* datPtr = (uint8_t*) payload;
+  for (int ii = 0; ii < dataLength; ++ii)
+  {
+    *memPtr = *datPtr;
+    ++memPtr;
+    ++datPtr;
+  }
+  m_mqttHasDataToRead = true;
+  return;  
 }

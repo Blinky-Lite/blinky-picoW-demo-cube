@@ -1,8 +1,7 @@
 #define BLINKY_DIAG         1
 #define COMM_LED_PIN       16
 #define RST_BUTTON_PIN     15
-
-#include "BlinkyPicoWCube.h"
+#include "BlinkyPicoWSetup.h"
 
 struct CubeSetting
 {
@@ -30,21 +29,23 @@ unsigned long lastPublishTime;
 void setupBlinky()
 {
   if (BLINKY_DIAG > 0) Serial.begin(9600);
-  BlinkyPicoWCube.setSsid("georg");
-  BlinkyPicoWCube.setWifiPassword("NONE");
-  BlinkyPicoWCube.setMqttServer("192.168.4.1");
-  BlinkyPicoWCube.setMqttUsername("blinky-lite-box-01");
-  BlinkyPicoWCube.setMqttPassword("areallybadpassword");
-  BlinkyPicoWCube.setBox("blinky-lite-box-01");
-  BlinkyPicoWCube.setTrayType("blinky-picoW");
-  BlinkyPicoWCube.setTrayName("picoW-02");
-  BlinkyPicoWCube.setCubeType("cube");
-  BlinkyPicoWCube.setMqttKeepAlive(15);
-  BlinkyPicoWCube.setMqttSocketTimeout(4);
-  BlinkyPicoWCube.setMqttPort(1883);
-  BlinkyPicoWCube.setMqttLedFlashMs(100);
-  BlinkyPicoWCube.setHdwrWatchdogMs(8000);
-  BlinkyPicoWCube.begin(BLINKY_DIAG, COMM_LED_PIN, RST_BUTTON_PIN, true, sizeof(setting), sizeof(reading));
+
+  BlinkyPicoW.setSsid("georg");
+  BlinkyPicoW.setWifiPassword("NONE");
+  BlinkyPicoW.setMqttServer("192.168.4.1");
+  BlinkyPicoW.setMqttUsername("blinky-lite-box-01");
+  BlinkyPicoW.setMqttPassword("areallybadpassword");
+  BlinkyPicoW.setBox("blinky-lite-box-01");
+  BlinkyPicoW.setTrayType("blinky-picoW");
+  BlinkyPicoW.setTrayName("picoW-02");
+  BlinkyPicoW.setCubeType("cube");
+  BlinkyPicoW.setMqttKeepAlive(15);
+  BlinkyPicoW.setMqttSocketTimeout(4);
+  BlinkyPicoW.setMqttPort(1883);
+  BlinkyPicoW.setMqttLedFlashMs(100);
+  BlinkyPicoW.setHdwrWatchdogMs(8000);
+
+  BlinkyPicoW.begin(BLINKY_DIAG, COMM_LED_PIN, RST_BUTTON_PIN, true, sizeof(setting), sizeof(reading));
 }
 
 void setupCube()
@@ -70,8 +71,7 @@ void loopCube()
   {
     lastPublishTime = now;
     reading.chipTemp = analogReadTemp();
-
-    boolean successful = publishCubeData((uint8_t*) &setting, (uint8_t*) &reading, false);
+    boolean successful = BlinkyPicoW.publishCubeData((uint8_t*) &setting, (uint8_t*) &reading, false);
   }
 
   led1 = led1 + signLed1;    
@@ -84,5 +84,5 @@ void loopCube()
   if (led1 == 0) signLed1 = 1;
   if (led2 == 0) signLed2 = 1;
   delay(5);
-  retrieveCubeSetting((uint8_t*) &setting);
+  boolean newSettings = BlinkyPicoW.retrieveCubeSetting((uint8_t*) &setting);
 }
